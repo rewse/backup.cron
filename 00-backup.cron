@@ -16,22 +16,24 @@
 # {{{ Variables
 
 # The path which has saved path. /etc/fstab needs to have this.
-MOUNT_PATH=
+MOUNT_PATH=/mnt/charlie/bak
 
 # The path which saves dumped files
-SAVE_PATH=/var/bak/dump/charlie
+SAVE_PATH=/mnt/charlie/bak/dump/oscar
 
 # The intervals of days at which dump in full. "7" means once
 # a week
 FULLDUMP_INTERVALS=30
 
 # The number of dump in full
-NUM_HISTORY=6
+NUM_HISTORY=3
 
 # Set "1" if you want to dump in full bu force
 FORCE_FULLDUMP=0
 
-SHIFT=0
+# You can shift fulldump day. Do fulludmp as same day when SHIFT is the
+# same on multiple servers
+SHIFT=2
 
 # Set "1" if you use debug mode
 DEBUG=0
@@ -104,8 +106,6 @@ rmdumpedpathlist() {
     echo "[WARNING] Can't remove $DUMPED_PATH_LIST." 1>&2
     return 1
   fi
-
-  return 0
 }
 
 # }}}
@@ -117,8 +117,6 @@ mkdumpedpathlist() {
   # make dumped path list from dump flags at /etc/fstab
   awk '/^[^#]/ { print $1, $5}' $FSTAB |
     awk '$2 == 1 { print $1}' > $DUMPED_PATH_LIST
-
-  return 0
 }
 
 # }}}
@@ -135,8 +133,6 @@ umountsavepath() {
     echo "[WARNING] Can't unmount save path" 1>&2
     return 1
   fi
-
-  return 0
 }
 
 # }}}
@@ -153,8 +149,6 @@ mountsavepath() {
       exit 1
     fi
   fi
-
-  return 0
 
   if [ ! -w $SAVE_PATH ]; then
     echo "[ERROR] Can't write a file to the save path" 1>&2
@@ -174,19 +168,18 @@ rmsnapshotlv() {
     echo "[ERROR] Can't remove the snapshot logical volume." 1>&2
     exit 1
   fi
-
-  return 0
 }
 
 # }}}
 # {{{ mksnapshotlv()
+
 mksnapshotlv() {
-  ESCAPTED_DUMPED_PATH=`echo $DUMPED_PATH | sed -e 's!/!\\\\/!g'`
+  ESCAPED_DUMPED_PATH=`echo $DUMPED_PATH | sed -e 's!/!\\\\/!g'`
 
   # Set snapshot size for the dumped logical volume
   SNAPSHOT_SIZE=`df -P |
   sed 's!^/dev/mapper/\(..*\)-\(..*\)$!/dev/\1/\2!' |
-    awk "\\$1 ~ /^$ESCAPTED_DUMPED_PATH\\$/ {print \\$2 * 0.1}"`
+    awk "\\$1 ~ /^$ESCAPED_DUMPED_PATH\\$/ {print \\$2 * 0.1}"`
 
   # Set the logical volume name
   DUMPED_LV=`echo $DUMPED_PATH |
@@ -204,6 +197,7 @@ mksnapshotlv() {
     exit 1
   fi
 }
+
 # }}}
 # {{{ makehistory()
 
