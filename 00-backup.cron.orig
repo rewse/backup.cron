@@ -1,0 +1,337 @@
+#!/bin/sh
+######################################################################
+# @(#) Dump with LVM
+#
+# This script backs up some source filesystem to local another path
+# by dump. It uses a logical volume snapshot if the source is a 
+# logical volume.
+#
+#  Author: Tats SHIBATA
+# Licenct: http://rewse.jp/license/2011.01.txt
+#
+# Copyright (c) 2006, 2011 Rewse Lab. All rights reserved.
+#
+######################################################################
+
+# {{{ Variables
+
+# The path which has saved path. /etc/fstab needs to have this.
+MOUNT_PATH=/mnt/charlie/bak
+
+# The path which saves dumped files
+SAVE_PATH=/mnt/charlie/bak/dump/oscar
+
+# The intervals of days at which dump in full. "7" means once
+# a week
+FULLDUMP_INTERVALS=30
+
+# The number of dump in full
+NUM_HISTORY=3
+
+# Set "1" if you want to dump in full bu force
+FORCE_FULLDUMP=0
+
+# You can shift fulldump day. Do fulludmp as same day when SHIFT is the
+# same on multiple servers
+SHIFT=2
+
+# Set "1" if you use debug mode
+DEBUG=0
+
+PATH='/sbin:/bin:/usr/sbin:/usr/bin'
+
+FSTAB='/etc/fstab'
+
+DUMPED_PATH_LIST='/tmp/dumpedpath.lst'
+
+LOG='/var/log/backup.log'
+
+SNAPSHOT_SUFFIX='_snap'
+
+DUMP_SUFFIX='.dump'
+
+IS_REMOTELY=1
+
+# }}}
+######################################################################
+# {{{ setparams()
+
+setparams() {
+  case "$1" in
+    --full | -f )
+      FORCE_FULLDUMP='1'
+      return 0
+      ;;
+    "" )
+      return 0
+      ;;
+    * )
+      echo "[USAGE] $0 [--full]" 1>&2
+      exit 1
+      ;;
+  esac
+}
+
+# }}}
+# {{{ validvar()
+
+validvar() {
+  if [ ! "`cat $FSTAB | grep \ $MOUNT_PATH\ `" ]; then
+    echo "[ERROR] $MOUNT_PATH doesn't exist in $FSTAB." 1>&2
+    exit 1
+  fi
+
+  if [ $FULLDUMP_INTERVALS -lt 0 ]; then
+    echo '[ERROR] $FULLDUMP_INTERVALS is needed to set 1 or more.' 1>&2
+    exit 1
+  fi
+
+  if [ $FORCE_FULLDUMP -lt 0 -o $FORCE_FULLDUMP -gt 1 ]; then
+    echo '[ERROR] $FORCE_FULLDUMP is needed to set 1 or 0.' 1>&2
+    exit 1
+  fi
+
+  return 0
+}
+
+# }}}
+# {{{ rmdumpedpathlist()
+
+rmdumpedpathlist() {
+  if [ -f $DUMPED_PATH_LIST ]; then
+    rm -f $DUMPED_PATH_LIST
+  fi
+
+  if [ $? -ne 0 ]; then
+    echo "[WARNING] Can't remove $DUMPED_PATH_LIST." 1>&2
+    return 1
+  fi
+}
+
+# }}}
+# {{{ mkdumpedpathlist()
+
+mkdumpedpathlist() {
+  rmdumpedpathlist
+
+  # make dumped path list from dump flags at /etc/fstab
+  awk '/^[^#]/ { print $1, $5}' $FSTAB |
+    awk '$2 == 1 { print $1}' > $DUMPED_PATH_LIST
+}
+
+# }}}
+# {{{ umountsavepath()
+
+umountsavepath() {
+  if [ "$MOUNT_PATH" = "" ]; then
+    return 0
+  elif [ "`mount | grep $MOUNT_PATH`" ]; then
+    umount $MOUNT_PATH
+  fi
+
+  if [ $? -ne 0 ]; then
+    echo "[WARNING] Can't unmount save path" 1>&2
+    return 1
+  fi
+}
+
+# }}}
+# {{{ mountsavepath()
+
+mountsavepath() {
+  if [ "$MOUNT_PATH" = "" ]; then
+    return 0
+  elif [ ! "`mount | grep $MOUNT_PATH`" ]; then
+    mount $MOUNT_PATH
+
+    if [ $? -ne 0 ]; then
+      echo "[ERROR] Can't mount the save path." 1>&2
+      exit 1
+    fi
+  fi
+
+  if [ ! -w $SAVE_PATH ]; then
+    echo "[ERROR] Can't write a file to the save path" 1>&2
+    exit 1
+  fi
+}
+
+# }}}
+# {{{ rmsnapsholv()
+
+rmsnapshotlv() {
+  if [ `lvdisplay -c $DUMPED_PATH$SNAPSHOT_SUFFIX 2> /dev/null` ]; then
+    lvremove -f $DUMPED_PATH$SNAPSHOT_SUFFIX
+  fi
+
+  if [ $? -ne 0 ]; then
+    echo "[ERROR] Can't remove the snapshot logical volume." 1>&2
+    exit 1
+  fi
+}
+
+# }}}
+# {{{ mksnapshotlv()
+
+mksnapshotlv() {
+  ESCAPED_DUMPED_PATH=`echo $DUMPED_PATH | sed -e 's!/!\\\\/!g'`
+
+  # Set snapshot size for the dumped logical volume
+  SNAPSHOT_SIZE=`df -P |
+  sed 's!^/dev/mapper/\(..*\)-\(..*\)$!/dev/\1/\2!' |
+    awk "\\$1 ~ /^$ESCAPED_DUMPED_PATH\\$/ {print \\$2 * 0.1}"`
+
+  # Set the logical volume name
+  DUMPED_LV=`echo $DUMPED_PATH |
+    awk 'BEGIN { FS="/" } { print $NF }'`
+
+  # Remove the snapshot logical volume for initialize
+  rmsnapshotlv
+
+  # Create a snapshot logical volume
+  lvcreate -s -L ${SNAPSHOT_SIZE}k \
+    -n $DUMPED_LV$SNAPSHOT_SUFFIX $DUMPED_PATH
+
+  if [ $? -ne 0 ]; then
+    echo "[ERROR] Can't create the snapshot logical volume." 1>&2
+    exit 1
+  fi
+}
+
+# }}}
+# {{{ makehistory()
+
+makehistory() {
+  # Make direcotry for histories
+  for HISTORY in `seq 1 $NUM_HISTORY`; do
+    if [ ! -d $SAVE_PATH/$HISTORY ]; then
+      mkdir $SAVE_PATH/$HISTORY
+
+      if [ $? -ne 0 ]; then
+        echo "[ERROR] Can't make a history directory." 1>&2
+        exit 1
+      fi
+    fi
+  done
+
+  # Remove the surplus directories if NUM_HISTORY was reduced
+  for DIR in `ls $SAVE_PATH`; do
+    if [ $DIR -gt $NUM_HISTORY ]; then
+      rm -rf $DIR
+    fi
+  done
+}
+
+# }}}
+# {{{ rotatehistory
+
+rotatehistory() {
+  FIRST_FLAG=0
+  for DIR in `ls $SAVE_PATH | sort -rn`; do
+    if [ $FIRST_FLAG -eq 0 ]; then
+      mv $SAVE_PATH/$DIR $SAVE_PATH/oldest
+      FIRST_FLAG=1
+    else
+      mv $SAVE_PATH/$DIR $SAVE_PATH/`expr $(basename $DIR) + 1`
+    fi
+  done
+
+  # Remove the oldedst hisotry
+  rm -rf $SAVE_PATH/oldest
+
+  # Make the newest history
+  mkdir $SAVE_PATH/1
+}
+
+# }}}
+# {{{ setdumplevel
+
+setdumplevel() {
+  # Get days from 1970-01-01 to now for dump level
+  SECS=`date +%s`
+  DAYS=`expr $SECS / 60 / 60 / 24 + $SHIFT`
+
+  # Set dump level by days from 1970-01-01
+  if [ $FORCE_FULLDUMP -eq 1 ]; then
+    DUMP_LEVEL=0
+  else
+    DUMP_LEVEL=`expr $DAYS % $FULLDUMP_INTERVALS`
+  fi
+
+  if [ $DUMP_LEVEL -eq 0 ]; then
+    rotatehistory
+  fi
+}
+
+# }}}
+# {{{ dodump
+
+dodump() {
+  for DUMPED_PATH in $*; do
+    echo "[NOTICE] dump begins for $DUMPED_PATH: `date`" >> $LOG
+
+    # Set the source path if it use a label
+    DUMPED_PATH=`echo $DUMPED_PATH | sed -e 's/LABEL=//'`
+
+    # Set the target filename
+    TARGET_FILENAME=`echo $DUMPED_PATH |
+      sed -e 's!/!-!g' -e 's/^-//'`
+
+    if [ `lvdisplay -c $DUMPED_PATH 2> /dev/null` ]; then
+      mksnapshotlv
+
+      # Dump the logical volume
+      if [ $DEBUG = 0 ]; then
+        dump ${DUMP_LEVEL}uf \
+          $SAVE_PATH/1/$TARGET_FILENAME.$DUMP_LEVEL$DUMP_SUFFIX \
+          $DUMPED_PATH$SNAPSHOT_SUFFIX 2>&1
+      else
+        echo "dump ${DUMP_LEVEL}uf $SAVE_PATH/1/$TARGET_FILENAME.$DUMP_LEVEL$DUMP_SUFFIX $DUMPED_PATH$SNAPSHOT_SUFFIX 2>&1"
+      fi
+
+      # Remove the snapshot logical volume for finish
+      rmsnapshotlv
+    else
+      if [ $DEBUG = 0 ]; then
+        dump ${DUMP_LEVEL}uf \
+          $SAVE_PATH/1/$TARGET_FILENAME.$DUMP_LEVEL$DUMP_SUFFIX \
+          $DUMPED_PATH 2>&1
+      else
+        echo "dump ${DUMP_LEVEL}uf $SAVE_PATH/1/$TARGET_FILENAME.$DUMP_LEVEL$DUMP_SUFFIX $DUMPED_PATH 2>&1"
+      fi
+    fi
+  done
+}
+
+# }}}
+# {{{ Trap
+
+trap 'umountsavepath; rmdumpedpathlist; exit 1' 1 2 3 15
+
+# }}}
+# {{{ Main
+
+setparams $1
+
+echo "[NOTICE] Backup begins: `date`" >> $LOG
+
+validvar >> $LOG
+
+mkdumpedpathlist >> $LOG
+
+mountsavepath >> $LOG
+
+makehistory >> $LOG
+
+setdumplevel >> $LOG
+
+dodump `cat $DUMPED_PATH_LIST` >> $LOG
+
+umountsavepath >> $LOG
+
+rmdumpedpathlist >> $LOG
+
+echo "[NOTICE] Backup ends: `date`" >> $LOG
+echo "----------------------------------------------------------------------" >> $LOG
+
+# }}}

@@ -1,10 +1,10 @@
 #!/bin/sh
 ######################################################################
-# @(#) Dump with LVM
+# @(#) rsync like Time Machine
 #
-# This script backs up some source filesystem to local another path
-# by dump. It uses a logical volume snapshot if the source is a 
-# logical volume.
+# This script backs up a source directory to local another directory
+# by rsync. It supports history and reduce size by hard link like
+# Mac OS's Time Machine.
 #
 #  Author: Tats SHIBATA
 # Licenct: http://rewse.jp/license/2011.01.txt
@@ -15,323 +15,175 @@
 
 # {{{ Variables
 
-# The path which has saved path. /etc/fstab needs to have this.
-MOUNT_PATH=/mnt/charlie/bak
+SOURCE_PATH=/tmp/bar
 
-# The path which saves dumped files
-SAVE_PATH=/mnt/charlie/bak/dump/oscar
+TARGET_PATH=/mnt/foo/bar
 
-# The intervals of days at which dump in full. "7" means once
-# a week
-FULLDUMP_INTERVALS=30
+MOUNT_PATH=/mnt/foo
 
-# The number of dump in full
-NUM_HISTORY=3
+LOG=/var/log/backup.log
 
-# Set "1" if you want to dump in full bu force
-FORCE_FULLDUMP=0
-
-# You can shift fulldump day. Do fulludmp as same day when SHIFT is the
-# same on multiple servers
-SHIFT=2
-
-# Set "1" if you use debug mode
-DEBUG=0
-
-PATH='/sbin:/bin:/usr/sbin:/usr/bin'
-
-FSTAB='/etc/fstab'
-
-DUMPED_PATH_LIST='/tmp/dumpedpath.lst'
-
-LOG='/var/log/backup.log'
-
-SNAPSHOT_SUFFIX='_snap'
-
-DUMP_SUFFIX='.dump'
-
-IS_REMOTELY=1
+THRESHOLD=90
 
 # }}}
-######################################################################
-# {{{ setparams()
+# {{{ mountpath()
 
-setparams() {
-  case "$1" in
-    --full | -f )
-      FORCE_FULLDUMP='1'
-      return 0
-      ;;
-    "" )
-      return 0
-      ;;
-    * )
-      echo "[USAGE] $0 [--full]" 1>&2
-      exit 1
-      ;;
-  esac
-}
-
-# }}}
-# {{{ validvar()
-
-validvar() {
-  if [ ! "`cat $FSTAB | grep \ $MOUNT_PATH\ `" ]; then
-    echo "[ERROR] $MOUNT_PATH doesn't exist in $FSTAB." 1>&2
-    exit 1
-  fi
-
-  if [ $FULLDUMP_INTERVALS -lt 0 ]; then
-    echo '[ERROR] $FULLDUMP_INTERVALS is needed to set 1 or more.' 1>&2
-    exit 1
-  fi
-
-  if [ $FORCE_FULLDUMP -lt 0 -o $FORCE_FULLDUMP -gt 1 ]; then
-    echo '[ERROR] $FORCE_FULLDUMP is needed to set 1 or 0.' 1>&2
-    exit 1
-  fi
-
-  return 0
-}
-
-# }}}
-# {{{ rmdumpedpathlist()
-
-rmdumpedpathlist() {
-  if [ -f $DUMPED_PATH_LIST ]; then
-    rm -f $DUMPED_PATH_LIST
-  fi
-
-  if [ $? -ne 0 ]; then
-    echo "[WARNING] Can't remove $DUMPED_PATH_LIST." 1>&2
-    return 1
-  fi
-}
-
-# }}}
-# {{{ mkdumpedpathlist()
-
-mkdumpedpathlist() {
-  rmdumpedpathlist
-
-  # make dumped path list from dump flags at /etc/fstab
-  awk '/^[^#]/ { print $1, $5}' $FSTAB |
-    awk '$2 == 1 { print $1}' > $DUMPED_PATH_LIST
-}
-
-# }}}
-# {{{ umountsavepath()
-
-umountsavepath() {
-  if [ "$MOUNT_PATH" = "" ]; then
+mountpath() {
+  if [ "MOUNT_PATH" = "" ]; then
     return 0
-  elif [ "`mount | grep $MOUNT_PATH`" ]; then
-    umount $MOUNT_PATH
   fi
 
-  if [ $? -ne 0 ]; then
-    echo "[WARNING] Can't unmount save path" 1>&2
-    return 1
-  fi
-}
-
-# }}}
-# {{{ mountsavepath()
-
-mountsavepath() {
-  if [ "$MOUNT_PATH" = "" ]; then
-    return 0
-  elif [ ! "`mount | grep $MOUNT_PATH`" ]; then
+  if [ ! "`mount | grep $MOUNT_PATH`" ]; then
     mount $MOUNT_PATH
 
     if [ $? -ne 0 ]; then
-      echo "[ERROR] Can't mount the save path." 1>&2
+      echo "[ERROR] Can't mount $MOUNT_PATH" 1>&2
       exit 1
     fi
   fi
-
-  if [ ! -w $SAVE_PATH ]; then
-    echo "[ERROR] Can't write a file to the save path" 1>&2
-    exit 1
-  fi
 }
 
 # }}}
-# {{{ rmsnapsholv()
+# {{{ umountpath()
 
-rmsnapshotlv() {
-  if [ `lvdisplay -c $DUMPED_PATH$SNAPSHOT_SUFFIX 2> /dev/null` ]; then
-    lvremove -f $DUMPED_PATH$SNAPSHOT_SUFFIX
+umountpath() {
+  if [ "MOUNT_PATH" = "" ]; then
+    return 0
   fi
+
+  umount $MOUNT_PATH
 
   if [ $? -ne 0 ]; then
-    echo "[ERROR] Can't remove the snapshot logical volume." 1>&2
+    echo "[ERROR] Can't unmount $MOUNT_PATH" 1>&2
     exit 1
   fi
 }
 
 # }}}
-# {{{ mksnapshotlv()
+# {{{ mktargetdir()
 
-mksnapshotlv() {
-  ESCAPED_DUMPED_PATH=`echo $DUMPED_PATH | sed -e 's!/!\\\\/!g'`
+mktargetdir() {
+  TARGET_DIR=`date '+%Y%m%dW%VT%H%M%S'`
 
-  # Set snapshot size for the dumped logical volume
-  SNAPSHOT_SIZE=`df -P |
-  sed 's!^/dev/mapper/\(..*\)-\(..*\)$!/dev/\1/\2!' |
-    awk "\\$1 ~ /^$ESCAPED_DUMPED_PATH\\$/ {print \\$2 * 0.1}"`
-
-  # Set the logical volume name
-  DUMPED_LV=`echo $DUMPED_PATH |
-    awk 'BEGIN { FS="/" } { print $NF }'`
-
-  # Remove the snapshot logical volume for initialize
-  rmsnapshotlv
-
-  # Create a snapshot logical volume
-  lvcreate -s -L ${SNAPSHOT_SIZE}k \
-    -n $DUMPED_LV$SNAPSHOT_SUFFIX $DUMPED_PATH
+  mkdir -p $TARGET_PATH/$TARGET_DIR
 
   if [ $? -ne 0 ]; then
-    echo "[ERROR] Can't create the snapshot logical volume." 1>&2
+    echo "[ERROR] Can't make $TARGET_PATH/$TARGET_DIR" 1>&2
     exit 1
   fi
 }
 
-# }}}
-# {{{ makehistory()
+# {{{ dorsync
 
-makehistory() {
-  # Make direcotry for histories
-  for HISTORY in `seq 1 $NUM_HISTORY`; do
-    if [ ! -d $SAVE_PATH/$HISTORY ]; then
-      mkdir $SAVE_PATH/$HISTORY
-
-      if [ $? -ne 0 ]; then
-        echo "[ERROR] Can't make a history directory." 1>&2
-        exit 1
-      fi
-    fi
-  done
-
-  # Remove the surplus directories if NUM_HISTORY was reduced
-  for DIR in `ls $SAVE_PATH`; do
-    if [ $DIR -gt $NUM_HISTORY ]; then
-      rm -rf $DIR
-    fi
-  done
-}
-
-# }}}
-# {{{ rotatehistory
-
-rotatehistory() {
-  FIRST_FLAG=0
-  for DIR in `ls $SAVE_PATH | sort -rn`; do
-    if [ $FIRST_FLAG -eq 0 ]; then
-      mv $SAVE_PATH/$DIR $SAVE_PATH/oldest
-      FIRST_FLAG=1
-    else
-      mv $SAVE_PATH/$DIR $SAVE_PATH/`expr $(basename $DIR) + 1`
-    fi
-  done
-
-  # Remove the oldedst hisotry
-  rm -rf $SAVE_PATH/oldest
-
-  # Make the newest history
-  mkdir $SAVE_PATH/1
-}
-
-# }}}
-# {{{ setdumplevel
-
-setdumplevel() {
-  # Get days from 1970-01-01 to now for dump level
-  SECS=`date +%s`
-  DAYS=`expr $SECS / 60 / 60 / 24 + $SHIFT`
-
-  # Set dump level by days from 1970-01-01
-  if [ $FORCE_FULLDUMP -eq 1 ]; then
-    DUMP_LEVEL=0
+dorsync() {
+  if [ -d $TARGET_PATH/latest ]; then
+    rsync -avz --stats --link-dest=../latest \
+      $SOURCE_PATH/ $TARGET_PATH/$TARGET_DIR
   else
-    DUMP_LEVEL=`expr $DAYS % $FULLDUMP_INTERVALS`
+    rsync -avz --stats $SOURCE_PATH/ $TARGET_PATH/$TARGET_DIR
   fi
 
-  if [ $DUMP_LEVEL -eq 0 ]; then
-    rotatehistory
+  if [ $? -ne 0 ]; then
+    echo "[ERROR] Can't rsync" 1>&2
+    exit 1
   fi
 }
 
 # }}}
-# {{{ dodump
+# {{{ mklatest()
 
-dodump() {
-  for DUMPED_PATH in $*; do
-    echo "[NOTICE] dump begins for $DUMPED_PATH: `date`" >> $LOG
+mklatest() {
+  cd $TARGET_PATH && rm -f latest && ln -s $TARGET_DIR latest && cd -
 
-    # Set the source path if it use a label
-    DUMPED_PATH=`echo $DUMPED_PATH | sed -e 's/LABEL=//'`
+  if [ $? -ne 0 ]; then
+    echo "[ERROR] Can't make $TARGET_PATH/latest" 1>&2
+    exit 1
+  fi
+}
 
-    # Set the target filename
-    TARGET_FILENAME=`echo $DUMPED_PATH |
-      sed -e 's!/!-!g' -e 's/^-//'`
+# }}}
+# {{{ purgeexcess()
 
-    if [ `lvdisplay -c $DUMPED_PATH 2> /dev/null` ]; then
-      mksnapshotlv
+purgeexcess() {
+  # should set from $TARGET_DIR instead of date command because $TARGET_DIR
+  # date might be diffrent from date command when this script is started
+  # just before 0:00 midnight.
+  NOW_YEAR=`expr substr $TARGET_DIR 1 4`
+  NOW_MONTH=`expr substr $TARGET_DIR 5 2`
+  NOW_DAY=`expr substr $TARGET_DIR 7 2`
 
-      # Dump the logical volume
-      if [ $DEBUG = 0 ]; then
-        dump ${DUMP_LEVEL}uf \
-          $SAVE_PATH/1/$TARGET_FILENAME.$DUMP_LEVEL$DUMP_SUFFIX \
-          $DUMPED_PATH$SNAPSHOT_SUFFIX 2>&1
-      else
-        echo "dump ${DUMP_LEVEL}uf $SAVE_PATH/1/$TARGET_FILENAME.$DUMP_LEVEL$DUMP_SUFFIX $DUMPED_PATH$SNAPSHOT_SUFFIX 2>&1"
-      fi
+  LASTMONTH_YEAR=`date --date "$NOW_YEAR-$NOW_MONTH-$NOW_DAY 1 months ago" '+%Y'`
+  LASTMONTH_WEEK=`date --date "$NOW_YEAR-$NOW_MONTH-$NOW_DAY 1 months ago" '+%V'`
 
-      # Remove the snapshot logical volume for finish
-      rmsnapshotlv
-    else
-      if [ $DEBUG = 0 ]; then
-        dump ${DUMP_LEVEL}uf \
-          $SAVE_PATH/1/$TARGET_FILENAME.$DUMP_LEVEL$DUMP_SUFFIX \
-          $DUMPED_PATH 2>&1
-      else
-        echo "dump ${DUMP_LEVEL}uf $SAVE_PATH/1/$TARGET_FILENAME.$DUMP_LEVEL$DUMP_SUFFIX $DUMPED_PATH 2>&1"
-      fi
+  for DIR in `ls $TARGET_PATH | egrep -v "$TARGET_DIR|latest"`; do
+    if [ ! -d $TARGET_PATH/$DIR ]; then
+      # $DIR was already purged by this function
+      continue
     fi
+
+    DIR_YEAR=`expr substr $DIR 1 4`
+    DIR_WEEK=`expr substr $DIR 10 2`
+    DIR_DATE=`expr substr $DIR 1 8`
+
+    if [ $DIR_YEAR -lt $LASTMONTH_YEAR ]; then
+      OLDEST=`ls -d $TARGET_PATH/$DIR_YEAR*W$DIR_WEEK* | head -1`
+
+      PURGED_DIR=`ls -d $TARGET_PATH/$DIR_YEAR*W$DIR_WEEK* | grep -v $OLDEST`
+    elif [ $DIR_YEAR -eq $LASTMONTH_YEAR -a $DIR_WEEK -le $LASTMONTH_WEEK ]; then
+      OLDEST=`ls -d $TARGET_PATH/$DIR_YEAR*W$DIR_WEEK* | head -1`
+
+      PURGED_DIR=`ls -d $TARGET_PATH/$DIR_YEAR*W$DIR_WEEK* | grep -v $OLDEST`
+    else
+      # $DIR was created within 1 month from now on
+      OLDEST=`ls -d $TARGET_PATH/$DIR_DATE* | head -1`
+
+      PURGED_DIR=`ls -d $TARGET_PATH/$DIR_DATE* | grep -v $OLDEST`
+    fi
+
+    for DIR in $PURGED_DIR; do
+      if [ $DIR == $TARGET_PATH/$TARGET_DIR ]; then
+        # Don't purge the just created directory
+        continue
+      fi
+
+      echo "Purging $DIR..."
+      rm -rf $DIR
+    done
   done
+}
+
+# }}}
+# {{{ purgeold()
+
+purgeold() {
+  CURRENT_USAGE=`df -P | grep $MOUNT_PATH | awk '{print $5}' | sed 's/%//'`
 }
 
 # }}}
 # {{{ Trap
 
-trap 'umountsavepath; rmdumpedpathlist; exit 1' 1 2 3 15
+trap 'exit 1' 1 2 3 15
 
 # }}}
 # {{{ Main
 
-setparams $1
+mountpath >> $LOG
 
-echo "[NOTICE] Backup begins: `date`" >> $LOG
+mktargetdir >> $LOG
 
-validvar >> $LOG
+dorsync >> $LOG
 
-mkdumpedpathlist >> $LOG
+mklatest >> $LOG
 
-mountsavepath >> $LOG
+purgeexcess >> $LOG
 
-makehistory >> $LOG
+# TODO: puregeold >> $LOG
 
-setdumplevel >> $LOG
+umountpath >> $LOG
 
-dodump `cat $DUMPED_PATH_LIST` >> $LOG
-
-umountsavepath >> $LOG
-
-rmdumpedpathlist >> $LOG
-
-echo "[NOTICE] Backup ends: `date`" >> $LOG
-echo "----------------------------------------------------------------------" >> $LOG
+cat <<! >> $LOG
+[NOTICE] Backup ends: `date`
+---------------------------------------------------------------------
+!
 
 # }}}
