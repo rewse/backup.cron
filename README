@@ -1,1 +1,3 @@
-This script backs up some source filesystem to local another path by dump. It uses a logical volume snapshot if the source is a logical volume.
+This script backs up a source directory to local another directory
+by rsync. It supports history and reduce size by hard link like
+Mac OS's Time Machine.
