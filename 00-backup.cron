@@ -12,18 +12,56 @@
 # Copyright (c) 2006, 2011 Rewse Lab. All rights reserved.
 #
 ######################################################################
-
 # {{{ Variables
 
-SOURCE_PATH=/tmp/bar
+# backup source
+SOURCE_PATH=/
 
-TARGET_PATH=/mnt/foo/bar
+# backup target
+TARGET_PATH=/var/bak/rsync/charlie
 
-MOUNT_PATH=/mnt/foo
+# the script mounts before rsync and unmounts after rsync
+# skip mount/unmount if not set
+MOUNT_PATH=/var/bak
 
+# do rsync excluding these
+EXCLUDES="/dev /lost+found /media /mnt /proc /selinux /srv /sys cache/ tmp/ /var/bak /var/lib/xen"
+
+# purge some oldest backup sets if disk usage % is greater than this
+THRESHOLD=95
+
+# script log
 LOG=/var/log/backup.log
 
-THRESHOLD=90
+# }}}
+# {{{ umountpath()
+
+umountpath() {
+  if [ "MOUNT_PATH" = "" ]; then
+    return 0
+  fi
+
+  umount $MOUNT_PATH
+
+  if [ $? -ne 0 ]; then
+    echo "[WARNING] Can't unmount $MOUNT_PATH" 1>&2
+    # no need exit. it's called from myexit
+  fi
+}
+
+# }}}
+# {{{ myexit()
+
+myexit() {
+  umountpath
+
+  cat <<! >> $LOG
+[NOTICE] Backup ends: `date`
+---------------------------------------------------------------------
+!
+
+  exit $1
+}
 
 # }}}
 # {{{ mountpath()
@@ -38,24 +76,8 @@ mountpath() {
 
     if [ $? -ne 0 ]; then
       echo "[ERROR] Can't mount $MOUNT_PATH" 1>&2
-      exit 1
+      myexit 1
     fi
-  fi
-}
-
-# }}}
-# {{{ umountpath()
-
-umountpath() {
-  if [ "MOUNT_PATH" = "" ]; then
-    return 0
-  fi
-
-  umount $MOUNT_PATH
-
-  if [ $? -ne 0 ]; then
-    echo "[ERROR] Can't unmount $MOUNT_PATH" 1>&2
-    exit 1
   fi
 }
 
@@ -69,23 +91,31 @@ mktargetdir() {
 
   if [ $? -ne 0 ]; then
     echo "[ERROR] Can't make $TARGET_PATH/$TARGET_DIR" 1>&2
-    exit 1
+    myexit 1
   fi
 }
 
+# }}}
 # {{{ dorsync
 
 dorsync() {
+  for EXCLUDE in $EXCLUDES; do
+    EXCLUDE_OPTIONS="$EXCLUDE_OPTIONS --exclude $EXCLUDE"
+  done
+
+  EXCLUDE_OPTIONS="$EXCLUDE_OPTIONS --exclude $TARGET_PATH"
+
   if [ -d $TARGET_PATH/latest ]; then
-    rsync -avz --stats --link-dest=../latest \
+    rsync -avz --stats --link-dest=../latest $EXCLUDE_OPTIONS \
       $SOURCE_PATH/ $TARGET_PATH/$TARGET_DIR
   else
-    rsync -avz --stats $SOURCE_PATH/ $TARGET_PATH/$TARGET_DIR
+    rsync -avz --stats $EXCLUDE_OPTIONS \
+      $SOURCE_PATH/ $TARGET_PATH/$TARGET_DIR
   fi
 
   if [ $? -ne 0 ]; then
     echo "[ERROR] Can't rsync" 1>&2
-    exit 1
+    myexit 1
   fi
 }
 
@@ -97,7 +127,7 @@ mklatest() {
 
   if [ $? -ne 0 ]; then
     echo "[ERROR] Can't make $TARGET_PATH/latest" 1>&2
-    exit 1
+    myexit 1
   fi
 }
 
@@ -135,6 +165,7 @@ purgeexcess() {
       PURGED_DIR=`ls -d $TARGET_PATH/$DIR_YEAR*W$DIR_WEEK* | grep -v $OLDEST`
     else
       # $DIR was created within 1 month from now on
+
       OLDEST=`ls -d $TARGET_PATH/$DIR_DATE* | head -1`
 
       PURGED_DIR=`ls -d $TARGET_PATH/$DIR_DATE* | grep -v $OLDEST`
@@ -146,7 +177,7 @@ purgeexcess() {
         continue
       fi
 
-      echo "Purging $DIR..."
+      echo "[NOTICE] Purging $DIR..."
       rm -rf $DIR
     done
   done
@@ -157,33 +188,61 @@ purgeexcess() {
 
 purgeold() {
   CURRENT_USAGE=`df -P | grep $MOUNT_PATH | awk '{print $5}' | sed 's/%//'`
+  CURRENT_INODE=`df -iP | grep $MOUNT_PATH | awk '{print $5}' | sed 's/%//'`
+
+  while [ $CURRENT_USAGE -gt $THRESHOLD ]; do
+    OLDEST=`ls $TARGET_PATH | head -1`
+
+    if [ $OLDEST == $TARGET_DIR ]; then
+      echo "[ERROR] Only one backup set but no disk free space" 1>&2
+      myexit 1
+    else
+      echo "[NOTICE] Disk usage must be under $THRESHOLD% but $CURRENT_USAGE% now"
+      echo "[NOTICE] Purging $TARGET_PATH/$OLDEST..."
+      rm -rf $TARGET_PATH/$OLDEST
+
+      CURRENT_USAGE=`df -P | grep $MOUNT_PATH | awk '{print $5}' | sed 's/%//'`
+    fi
+  done
+
+  while [ $CURRENT_INODE -gt $THRESHOLD ]; do
+    OLDEST=`ls $TARGET_PATH | head -1`
+
+    if [ $OLDEST == $TARGET_DIR ]; then
+      echo "[ERROR] Only one backup set but no disk free inode" 1>&2
+      myexit 1
+    else
+      echo "[NOTICE] Used disk inode must be under $THRESHOLD% but $CURRENT_INODE% now"
+      echo "[NOTICE] Purging $TARGET_PATH/$OLDEST..."
+      rm -rf $TARGET_PATH/$OLDEST
+
+      CURRENT_INODE=`df -P | grep $MOUNT_PATH | awk '{print $5}' | sed 's/%//'`
+    fi
+  done
 }
 
 # }}}
 # {{{ Trap
 
-trap 'exit 1' 1 2 3 15
+trap 'myexit 1' 1 2 3 15
 
 # }}}
 # {{{ Main
 
-mountpath >> $LOG
+echo "[NOTICE] Backup begins: `date`" >> $LOG 2>&1
 
-mktargetdir >> $LOG
+mountpath >> $LOG 2>&1
 
-dorsync >> $LOG
+mktargetdir >> $LOG 2>&1
 
-mklatest >> $LOG
+dorsync >> $LOG 2>&1
 
-purgeexcess >> $LOG
+mklatest >> $LOG 2>&1
 
-# TODO: puregeold >> $LOG
+purgeexcess >> $LOG 2>&1
 
-umountpath >> $LOG
+purgeold >> $LOG 2>&1
 
-cat <<! >> $LOG
-[NOTICE] Backup ends: `date`
----------------------------------------------------------------------
-!
+myexit 0
 
 # }}}
