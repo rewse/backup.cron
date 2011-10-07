@@ -18,14 +18,14 @@
 SOURCE_PATH=/
 
 # backup target
-TARGET_PATH=/var/bak/rsync/charlie
+TARGET_PATH=/mnt/foo/bar
 
 # the script mounts before rsync and unmounts after rsync
 # skip mount/unmount if not set
-MOUNT_PATH=/var/bak
+MOUNT_PATH=/mnt/foo
 
 # do rsync excluding these
-EXCLUDES="/dev /lost+found /media /mnt /proc /selinux /srv /sys cache/ tmp/ /var/bak /var/lib/xen"
+EXCLUDES="/dev /lost+found /media /mnt /proc /selinux /srv /sys cache/ tmp/"
 
 # purge some oldest backup sets if disk usage % is greater than this
 THRESHOLD=95
@@ -53,6 +53,11 @@ umountpath() {
 # {{{ myexit()
 
 myexit() {
+  if [ "$1" != 0 ]; then
+    echo "[NOTICE] Removing $TARGET_PATH/$TARGET_DIR..."
+    rm -rf $TARGET_PATH/$TARGET_DIR
+  fi
+
   umountpath
 
   cat <<! >> $LOG
@@ -229,20 +234,20 @@ trap 'myexit 1' 1 2 3 15
 # }}}
 # {{{ Main
 
-echo "[NOTICE] Backup begins: `date`" >> $LOG 2>&1
+echo "[NOTICE] Backup begins: `date`" >> $LOG
 
-mountpath >> $LOG 2>&1
+mountpath >> $LOG
 
-mktargetdir >> $LOG 2>&1
+mktargetdir >> $LOG
 
-dorsync >> $LOG 2>&1
+dorsync >> $LOG
 
-mklatest >> $LOG 2>&1
+mklatest >> $LOG
 
-purgeexcess >> $LOG 2>&1
+purgeexcess >> $LOG
 
-purgeold >> $LOG 2>&1
+purgeold >> $LOG
 
-myexit 0
+myexit 0 >> $LOG
 
 # }}}
