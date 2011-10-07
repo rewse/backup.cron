@@ -1,0 +1,4 @@
+/var/log/backup.log {
+    missingok
+    notifempty
+}
