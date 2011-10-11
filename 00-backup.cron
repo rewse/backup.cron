@@ -12,32 +12,10 @@
 # Copyright (c) 2006, 2011 Rewse Lab. All rights reserved.
 #
 ######################################################################
-# {{{ Variables
-
-# backup source
-SOURCE_PATH=/
-
-# backup target
-TARGET_PATH=/mnt/foo/bar
-
-# the script mounts before rsync and unmounts after rsync
-# skip mount/unmount if not set
-MOUNT_PATH=/mnt/foo
-
-# do rsync excluding these
-EXCLUDES="/dev /lost+found /media /mnt /proc /selinux /srv /sys cache/ tmp/"
-
-# purge some oldest backup sets if disk usage % is greater than this
-THRESHOLD=95
-
-# script log
-LOG=/var/log/backup.log
-
-# }}}
 # {{{ umountpath()
 
 umountpath() {
-  if [ "MOUNT_PATH" = "" ]; then
+  if [ "$SKIP_MOUNT" = "1" ]; then
     return 0
   fi
 
@@ -53,11 +31,6 @@ umountpath() {
 # {{{ myexit()
 
 myexit() {
-  if [ "$1" != 0 ]; then
-    echo "[NOTICE] Removing $TARGET_PATH/$TARGET_DIR..."
-    rm -rf $TARGET_PATH/$TARGET_DIR
-  fi
-
   umountpath
 
   cat <<! >> $LOG
@@ -72,7 +45,7 @@ myexit() {
 # {{{ mountpath()
 
 mountpath() {
-  if [ "MOUNT_PATH" = "" ]; then
+  if [ "$SKIP_MOUNT" = "1" ]; then
     return 0
   fi
 
@@ -233,6 +206,12 @@ trap 'myexit 1' 1 2 3 15
 
 # }}}
 # {{{ Main
+if [ -f /etc/sysconfig/backup ]; then
+  . /etc/sysconfig/backup
+else
+  echo "[ERROR] /etc/sysconfig/backup is not found" 1>&2
+  exit 1
+fi
 
 echo "[NOTICE] Backup begins: `date`" >> $LOG
 

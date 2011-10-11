@@ -1,0 +1,20 @@
+# backup source
+SOURCE_PATH=/
+
+# backup target
+TARGET_PATH=/var/bak/rsync/charlie
+
+# the script mounts before rsync and unmounts after rsync
+MOUNT_PATH=/var/bak
+
+# skip mount/unmount if set 1
+SKIP_MOUNT=1
+
+# do rsync excluding these
+EXCLUDES="/dev /lost+found /media /mnt /proc /selinux /srv /sys cache/ tmp/ Cache/ /var/bak /var/lib/xen"
+
+# purge some oldest backup sets if disk usage % is greater than this
+THRESHOLD=95
+
+# script log
+LOG=/var/log/backup.log
