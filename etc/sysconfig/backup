@@ -2,16 +2,16 @@
 SOURCE_PATH=/
 
 # backup target
-TARGET_PATH=/var/bak/rsync/charlie
+TARGET_PATH=/mnt/foo/bar
 
 # the script mounts before rsync and unmounts after rsync
-MOUNT_PATH=/var/bak
+MOUNT_PATH=/mnt/foo
 
 # skip mount/unmount if set 1
-SKIP_MOUNT=1
+SKIP_MOUNT=0
 
 # do rsync excluding these
-EXCLUDES="/dev /lost+found /media /mnt /proc /selinux /srv /sys cache/ tmp/ Cache/ /var/bak /var/lib/xen"
+EXCLUDES="/dev /lost+found /media /mnt /proc /selinux /srv /sys cache/ Cache/ tmp/"
 
 # purge some oldest backup sets if disk usage % is greater than this
 THRESHOLD=95
