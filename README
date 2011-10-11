@@ -1,3 +1,10 @@
 This script backs up a source directory to local another directory
 by rsync. It supports history and reduce size by hard link like
 Mac OS's Time Machine.
+
+= How to install =
+
+1. Copy etc/logroated.d/backup to /etc/logroated.d/backup
+2. Copy etc/sysconfig/backup to /etc/sysconfig/backup
+3. Copy 00-bacup.cron to /etc/cron.daily
+4. Modify /etc/sysconfig/backup
