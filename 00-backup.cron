@@ -65,7 +65,7 @@ mountpath() {
 mktargetdir() {
   TARGET_DIR=`date '+%Y%m%dW%VT%H%M%S'`
 
-  mkdir -p $TARGET_PATH/$TARGET_DIR
+  mkdir $TARGET_PATH/$TARGET_DIR
 
   if [ $? -ne 0 ]; then
     echo "[ERROR] Can't make $TARGET_PATH/$TARGET_DIR" 1>&2
