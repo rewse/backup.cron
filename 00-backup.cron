@@ -31,6 +31,11 @@ umountpath() {
 # {{{ myexit()
 
 myexit() {
+  if [ $1 -ne 0 ]; then
+    rm -rf $TARGET_PATH/$TARGET_DIR
+    echo "[NOTICE] Removing $DIR..." >> $LOG
+  fi
+
   umountpath
 
   cat <<! >> $LOG
