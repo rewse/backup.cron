@@ -22,7 +22,7 @@ umountpath() {
   umount $MOUNT_PATH
 
   if [ $? -ne 0 ]; then
-    echo "[WARNING] Can't unmount $MOUNT_PATH" 1>&2
+    echo "[WARNING] Can't unmount $MOUNT_PATH [CODE=$?]" 1>&2
     # no need exit. it's called from myexit
   fi
 }
@@ -53,7 +53,7 @@ mountpath() {
     mount $MOUNT_PATH
 
     if [ $? -ne 0 ]; then
-      echo "[ERROR] Can't mount $MOUNT_PATH" 1>&2
+      echo "[ERROR] Can't mount $MOUNT_PATH [CODE=$?]" 1>&2
       myexit 1
     fi
   fi
@@ -68,7 +68,7 @@ mktargetdir() {
   mkdir $TARGET_PATH/$TARGET_DIR
 
   if [ $? -ne 0 ]; then
-    echo "[ERROR] Can't make $TARGET_PATH/$TARGET_DIR" 1>&2
+    echo "[ERROR] Can't make $TARGET_PATH/$TARGET_DIR [CODE=$?]" 1>&2
     myexit 1
   fi
 }
@@ -91,8 +91,9 @@ dorsync() {
       $SOURCE_PATH/ $TARGET_PATH/$TARGET_DIR
   fi
 
-  if [ $? -ne 0 ]; then
-    echo "[ERROR] Can't rsync" 1>&2
+  # 24: Partial transfer due to vanished source files
+  if [ $? -ne 0 -a $? -ne 24 ]; then
+    echo "[ERROR] Can't rsync [CODE=$?]" 1>&2
     myexit 1
   fi
 }
@@ -104,7 +105,7 @@ mklatest() {
   cd $TARGET_PATH && rm -f latest && ln -s $TARGET_DIR latest && cd -
 
   if [ $? -ne 0 ]; then
-    echo "[ERROR] Can't make $TARGET_PATH/latest" 1>&2
+    echo "[ERROR] Can't make $TARGET_PATH/latest [CODE=$?]" 1>&2
     myexit 1
   fi
 }
