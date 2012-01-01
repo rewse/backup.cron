@@ -1,14 +1,17 @@
 # backup source
 SOURCE_PATH=/
 
-# backup target
-TARGET_PATH=/mnt/foo/bar
-
 # the script mounts before rsync and unmounts after rsync
 MOUNT_PATH=/mnt/foo
 
+# backup target
+TARGET_PATH=/tmp/test
+
 # skip mount/unmount if set 1
-SKIP_MOUNT=0
+SKIP_MOUNT=1
+
+# use compression
+COMPRESSION=1
 
 # do rsync excluding these
 EXCLUDES="/dev /lost+found /media /mnt /proc /selinux /srv /sys cache/ Cache/ tmp/"

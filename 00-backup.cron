@@ -83,6 +83,10 @@ mktargetdir() {
 # {{{ dorsync
 
 dorsync() {
+  if [ "$COMPRESSION" == "1" ]; then
+    COMPFLAG=z
+  fi
+
   for EXCLUDE in $EXCLUDES; do
     EXCLUDE_OPTIONS="$EXCLUDE_OPTIONS --exclude $EXCLUDE"
   done
@@ -90,10 +94,10 @@ dorsync() {
   EXCLUDE_OPTIONS="$EXCLUDE_OPTIONS --exclude $TARGET_PATH"
 
   if [ -d $TARGET_PATH/latest ]; then
-    rsync -avz --stats --link-dest=../latest $EXCLUDE_OPTIONS \
+    rsync -av$COMPFLAG --stats --link-dest=../latest $EXCLUDE_OPTIONS \
       $SOURCE_PATH/ $TARGET_PATH/$TARGET_DIR
   else
-    rsync -avz --stats $EXCLUDE_OPTIONS \
+    rsync -av$COMPFLAG --stats $EXCLUDE_OPTIONS \
       $SOURCE_PATH/ $TARGET_PATH/$TARGET_DIR
   fi
 
