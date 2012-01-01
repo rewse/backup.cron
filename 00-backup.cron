@@ -32,9 +32,10 @@ umountpath() {
 
 myexit() {
   if [ $1 -ne 0 ]; then
-    rm -rf $TARGET_PATH/$TARGET_DIR
     echo "[NOTICE] Unexpected error [CODE=$1]" >> $LOG
-    echo "[NOTICE] Removing $DIR..." >> $LOG
+    echo "[NOTICE] Removing $TARGET_PATH/$TARGET_DIR..." >> $LOG
+    rm -rf $TARGET_PATH/$TARGET_DIR
+    rm -f /var/lock/subsys/backup
   fi
 
   umountpath
@@ -80,7 +81,23 @@ mktargetdir() {
 }
 
 # }}}
-# {{{ dorsync
+# {{{ chkinterruption()
+
+chkinterruption() {
+  if [ -f /var/lock/subsys/backup ]; then
+    LATEST=`ls -1 $TARGET_PATH | tail -2 | head -1`
+
+    echo "[NOTICE] The previous backup was interrupted."
+    echo "[NOTICE] Removing $TARGET_PATH/$LATEST..."
+    rm -rf $TARGET_PATH/$LATEST
+    rm -f /var/lock/subsys/backup
+  else
+    touch /var/lock/subsys/backup
+  fi
+}
+
+# }}}
+# {{{ dorsync()
 
 dorsync() {
   if [ "$COMPRESSION" == "1" ]; then
@@ -118,6 +135,8 @@ mklatest() {
     echo "[ERROR] Can't make $TARGET_PATH/latest [CODE=$?]" 1>&2
     myexit 1
   fi
+
+  rm -f /var/lock/subsys/backup
 }
 
 # }}}
@@ -228,6 +247,8 @@ fi
 echo "[NOTICE] Backup begins: `date`" >> $LOG
 
 mountpath >> $LOG
+
+chkinterruption >> $LOG
 
 mktargetdir >> $LOG
 
