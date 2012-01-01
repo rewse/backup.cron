@@ -33,6 +33,7 @@ umountpath() {
 myexit() {
   if [ $1 -ne 0 ]; then
     rm -rf $TARGET_PATH/$TARGET_DIR
+    echo "[NOTICE] Unexpected error [CODE=$1]" >> $LOG
     echo "[NOTICE] Removing $DIR..." >> $LOG
   fi
 
