@@ -5,10 +5,10 @@ SOURCE_PATH=/
 MOUNT_PATH=/mnt/foo
 
 # backup target
-TARGET_PATH=/tmp/test
+TARGET_PATH=/mnt/foo/bar
 
 # skip mount/unmount if set 1
-SKIP_MOUNT=1
+SKIP_MOUNT=0
 
 # use compression
 COMPRESSION=1
