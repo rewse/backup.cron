@@ -1,23 +1,26 @@
 # backup source
-SOURCE_PATH=/
-
-# the script mounts before rsync and unmounts after rsync
-MOUNT_PATH=/mnt/foo
-
-# backup target
-TARGET_PATH=/mnt/foo/bar
+# example: SOURCE_PATH=/
+#SOURCE_PATH=
 
 # skip mount/unmount if set 1
-SKIP_MOUNT=0
+#SKIP_MOUNT=0
+
+# the script mounts before rsync and unmounts after rsync
+# example: MOUNT_PATH=/mnt/foo
+#MOUNT_PATH=
+
+# backup target
+# example: TARGET_PATH=/mnt/foo/backup/hostname
+#TARGET_PATH=
 
 # use compression
-COMPRESSION=1
+#COMPRESSION=1
 
 # do rsync excluding these
-EXCLUDES="/dev /lost+found /media /mnt /proc /selinux /srv /sys cache/ Cache/ tmp/"
+#EXCLUDES="/cgroup /dev /lost+found /media /mnt /proc /selinux /srv /sys cache/ Cache/ tmp/"
 
 # purge some oldest backup sets if disk usage % is greater than this
-THRESHOLD=95
+#THRESHOLD=95
 
 # script log
-LOG=/var/log/backup.log
+#LOG=/var/log/backup.log

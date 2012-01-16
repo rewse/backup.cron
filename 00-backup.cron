@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -x
 ######################################################################
 # @(#) rsync like Time Machine
 #
@@ -28,14 +28,20 @@ umountpath() {
 }
 
 # }}}
-# {{{ myexit()
+# {{{ myeit()
 
 myexit() {
   if [ $1 -ne 0 ]; then
     echo "[NOTICE] Unexpected error [CODE=$1]" >> $LOG
-    echo "[NOTICE] Removing $TARGET_PATH/$TARGET_DIR..." >> $LOG
-    rm -rf $TARGET_PATH/$TARGET_DIR
-    rm -f /var/lock/subsys/backup
+
+    # if $TARGET_PATH and $TARGET_DIR are blank, rm -rf / is called!
+    if [ "$TARGET_PATH" != "" -o "$TARGET_DIR" != "" ]; then
+      echo "[NOTICE] Removing $TARGET_PATH/$TARGET_DIR..." >> $LOG
+      rm -rf $TARGET_PATH/$TARGET_DIR
+      rm -f /var/lock/subsys/backup
+    else
+      echo "[ERROR] Runtime error [CODE=001]"
+    fi
   fi
 
   umountpath
@@ -46,6 +52,59 @@ myexit() {
 !
 
   exit $1
+}
+
+# }}}
+# {{{ validconf()
+
+validconf() {
+  if [ ! -d "$SOURCE_PATH" ]; then
+    echo "SOURCE_PATH [$SOURCE_PATH] is not found"
+    exit 1
+  fi
+
+  case "$SKIP_MOUNT" in
+    [01]) : ;;
+    *)
+      echo "[ERROR] SKIP_MOUNT must be 0 or 1. Actual is $SKIP_MOUNT"
+      exit 1
+      ;;
+  esac
+
+  if [ ! -d "$MOUNT_PATH" -a "$SKIP_MOUNT" -eq 0 ]; then
+    echo "[ERROR] MOUNT_PATH [$MOUNT_PATH] is not found"
+    exit 1
+  fi
+
+  if [ "`grep "$MOUNT_PATH" /etc/fstab`" == "" -a "$SKIP_MOUNT" -eq 0 ]; then
+    echo "[ERROR] MOUNT_PATH [$MOUNT_PATH] is not found on /etc/fstab"
+    exit 1
+  fi
+
+  if [ "$TARGET_PATH" == "" ]; then
+    echo "[ERROR] TARGET_PATH is blank"
+    exit 1
+  fi
+
+  case "$COMPRESSION" in
+    [01]) : ;;
+    *)
+      echo "[ERROR] COMPRESSION must be 0 or 1. Acutual is $COMPRESSION"
+      exit 1
+      ;;
+  esac
+
+  if [ "$THRESHOLD" -ge 100 -o "$THRESHOLD" -le 0 ]; then
+    echo "[ERROR] THRESHOLD must be greater than 0 and less than 100. Actual is $THRESOLD"
+    exit 1
+  fi
+
+  touch "$LOG"
+
+  if [ $? -ne 0 ]; then
+    echo "[ERROR] Can't make $LOG [CODE=$?]"
+    exit 1
+  fi
 }
 
 # }}}
@@ -235,6 +294,18 @@ purgeold() {
 trap 'myexit 1' 1 2 3 15
 
 # }}}
+# {{{ Default conf
+
+SOURCE_PATH=
+MOUNT_PATH=
+TARGET_PATH=
+SKIP_MOUNT=0
+COMPRESSION=1
+EXCLUDES="/cgroup /dev /lost+found /media /mnt /proc /selinux /srv /sys cache/ Cache/ tmp/"
+THRESHOLD=95
+LOG=/var/log/backup.log
+
+# }}}
 # {{{ Main
 
 if [ -f /etc/sysconfig/backup ]; then
@@ -243,6 +314,8 @@ else
   echo "[ERROR] /etc/sysconfig/backup is not found" 1>&2
   exit 1
 fi
+
+validconf 1>&2
 
 echo "[NOTICE] Backup begins: `date`" >> $LOG
 
