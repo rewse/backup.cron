@@ -308,10 +308,10 @@ LOG=/var/log/backup.log
 # }}}
 # {{{ Main
 
-if [ -f /etc/sysconfig/backup ]; then
-  . /etc/sysconfig/backup
+if [ -f /etc/backup.conf ]; then
+  . /etc/backup.conf
 else
-  echo "[ERROR] /etc/sysconfig/backup is not found" 1>&2
+  echo "[ERROR] /etc/backup.conf is not found" 1>&2
   exit 1
 fi
 
