@@ -1,4 +1,4 @@
-#!/bin/sh -x
+#!/bin/sh
 ######################################################################
 # @(#) rsync like Time Machine
 #
@@ -64,8 +64,7 @@ validconf() {
   fi
 
   case "$SKIP_MOUNT" in
-    [01]) : ;;
-    *)
+    [!01])
       echo "[ERROR] SKIP_MOUNT must be 0 or 1. Actual is $SKIP_MOUNT"
       exit 1
       ;;
@@ -87,8 +86,7 @@ validconf() {
   fi
 
   case "$COMPRESSION" in
-    [01]) : ;;
-    *)
+    [!01])
       echo "[ERROR] COMPRESSION must be 0 or 1. Acutual is $COMPRESSION"
       exit 1
       ;;
