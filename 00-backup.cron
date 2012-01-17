@@ -35,7 +35,7 @@ myexit() {
     echo "[NOTICE] Unexpected error [CODE=$1]" >> $LOG
 
     # if $TARGET_PATH and $TARGET_DIR are blank, rm -rf / is called!
-    if [ "$TARGET_PATH" != "" -o "$TARGET_DIR" != "" ]; then
+    if [ "$TARGET_PATH" != "" -a "$TARGET_DIR" != "" ]; then
       echo "[NOTICE] Removing $TARGET_PATH/$TARGET_DIR..." >> $LOG
       rm -rf $TARGET_PATH/$TARGET_DIR
       rm -f /var/lock/subsys/backup
@@ -145,9 +145,15 @@ chkinterruption() {
     LATEST=`ls -1 $TARGET_PATH | tail -2 | head -1`
 
     echo "[NOTICE] The previous backup was interrupted."
-    echo "[NOTICE] Removing $TARGET_PATH/$LATEST..."
-    rm -rf $TARGET_PATH/$LATEST
-    rm -f /var/lock/subsys/backup
+
+    # if $TARGET_PATH and $LATEST are blank, rm -rf / is called!
+    if [ "$TARGET_PATH" != "" -a "$LATEST" != "" ]; then
+      echo "[NOTICE] Removing $TARGET_PATH/$LATEST..."
+      rm -rf $TARGET_PATH/$LATEST
+      rm -f /var/lock/subsys/backup
+    else
+      echo "[ERROR] Runtime error [CODE=002]"
+    fi
   else
     touch /var/lock/subsys/backup
   fi
@@ -242,8 +248,13 @@ purgeexcess() {
         continue
       fi
 
-      echo "[NOTICE] Purging $DIR..."
-      rm -rf $DIR
+      # if $TARGET_PATH is blank, rm -rf / might be called!
+      if [ "$TARGET_PATH" != "" ]; then
+        echo "[NOTICE] Purging $DIR..."
+        rm -rf $DIR
+      else
+        echo "[ERROR] Runtime error [CODE=003]"
+      fi
     done
   done
 }
@@ -263,8 +274,14 @@ purgeold() {
       myexit 1
     else
       echo "[NOTICE] Disk usage must be under $THRESHOLD% but $CURRENT_USAGE% now"
-      echo "[NOTICE] Purging $TARGET_PATH/$OLDEST..."
-      rm -rf $TARGET_PATH/$OLDEST
+
+      # if $TARGET_PATH and $OLDEST are blank, rm -rf / is called!
+      if [ "$TARGET_PATH" != "" -a "$LATEST" != "" ]; then
+        echo "[NOTICE] Purging $TARGET_PATH/$OLDEST..."
+        rm -rf $TARGET_PATH/$OLDEST
+      else
+        echo "[ERROR] Runtime error [CODE=004]"
+      fi
 
       CURRENT_USAGE=`df -P | grep $MOUNT_PATH | awk '{print $5}' | sed 's/%//'`
     fi
@@ -278,8 +295,14 @@ purgeold() {
       myexit 1
     else
       echo "[NOTICE] Used disk inode must be under $THRESHOLD% but $CURRENT_INODE% now"
-      echo "[NOTICE] Purging $TARGET_PATH/$OLDEST..."
-      rm -rf $TARGET_PATH/$OLDEST
+
+      # if $TARGET_PATH and $OLDEST are blank, rm -rf / is called!
+      if [ "$TARGET_PATH" != "" -a "$LATEST" != "" ]; then
+        echo "[NOTICE] Purging $TARGET_PATH/$OLDEST..."
+        rm -rf $TARGET_PATH/$OLDEST
+      else
+        echo "[ERROR] Runtime error [CODE=005]"
+      fi
 
       CURRENT_INODE=`df -P | grep $MOUNT_PATH | awk '{print $5}' | sed 's/%//'`
     fi
