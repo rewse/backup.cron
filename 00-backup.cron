@@ -150,7 +150,6 @@ chkinterruption() {
     if [ "$TARGET_PATH" != "" -a "$LATEST" != "" ]; then
       echo "[NOTICE] Removing $TARGET_PATH/$LATEST..."
       rm -rf $TARGET_PATH/$LATEST
-      rm -f /var/lock/subsys/backup
     else
       echo "[ERROR] Runtime error [CODE=002]" >&2
     fi
