@@ -127,7 +127,7 @@ mountpath() {
 # {{{ mktargetdir()
 
 mktargetdir() {
-  TARGET_DIR=`date '+%Y%m%dW%WT%H%M%S'`
+  TARGET_DIR=`date '+%Y%m%dW%UT%H%M%S'`
 
   mkdir $TARGET_PATH/$TARGET_DIR
 
@@ -213,7 +213,7 @@ purgeexcess() {
   NOW_DAY=`expr substr $TARGET_DIR 7 2`
 
   LASTMONTH_YEAR=`date --date "$NOW_YEAR-$NOW_MONTH-$NOW_DAY 1 months ago" '+%Y'`
-  LASTMONTH_WEEK=`date --date "$NOW_YEAR-$NOW_MONTH-$NOW_DAY 1 months ago" '+%W'`
+  LASTMONTH_WEEK=`date --date "$NOW_YEAR-$NOW_MONTH-$NOW_DAY 1 months ago" '+%U'`
 
   for DIR in `ls $TARGET_PATH | egrep -v "$TARGET_DIR|latest"`; do
     if [ ! -d $TARGET_PATH/$DIR ]; then
