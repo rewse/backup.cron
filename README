@@ -5,6 +5,6 @@ Mac OS's Time Machine.
 = How to install =
 
 1. Copy etc/logroated.d/backup to /etc/logroated.d/backup
-2. Copy etc/sysconfig/backup to /etc/sysconfig/backup
-3. Copy 00-bacup.cron to /etc/cron.daily
-4. Modify /etc/sysconfig/backup
+2. Copy etc/backup.conf to /etc/backup.conf
+3. Copy 00-backup.cron to /etc/cron.daily
+4. Modify /etc/backup.conf
