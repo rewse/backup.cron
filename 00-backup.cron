@@ -100,7 +100,7 @@ validconf() {
   esac
 
   if [ "$THRESHOLD" -ge 100 -o "$THRESHOLD" -le 0 ]; then
-    echo "`now` [ERROR] THRESHOLD must be greater than 0 and less than 100. Actual is $THRESOLD"
+    echo "`now` [ERROR] THRESHOLD must be greater than 0 and less than 100. Actual is $THRESHOLD"
     exit 1
   fi
 
