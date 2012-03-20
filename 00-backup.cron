@@ -275,11 +275,12 @@ purgeold() {
       echo "[NOTICE] Disk usage must be under $THRESHOLD% but $CURRENT_USAGE% now"
 
       # if $TARGET_PATH and $OLDEST are blank, rm -rf / is called!
-      if [ "$TARGET_PATH" != "" -a "$LATEST" != "" ]; then
+      if [ "$TARGET_PATH" != "" -a "$OLDEST" != "" ]; then
         echo "[NOTICE] Purging $TARGET_PATH/$OLDEST..."
         rm -rf $TARGET_PATH/$OLDEST
       else
         echo "[ERROR] Runtime error [CODE=004]" >&2
+        exit 1
       fi
 
       CURRENT_USAGE=`df -P | grep $MOUNT_PATH | awk '{print $5}' | sed 's/%//'`
