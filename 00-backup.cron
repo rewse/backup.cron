@@ -164,8 +164,6 @@ chkinterruption() {
       echo "`now` [ERROR] Runtime error [CODE=002]" >&2
       myexit 1
     fi
-  else
-    touch /var/lock/subsys/backup
   fi
 }
 
@@ -182,6 +180,8 @@ dorsync() {
   done
 
   EXCLUDE_OPTIONS="$EXCLUDE_OPTIONS --exclude $TARGET_PATH"
+
+  touch /var/lock/subsys/backup
 
   if [ -d $TARGET_PATH/latest ]; then
     rsync -av$COMPFLAG --stats --link-dest=../latest $EXCLUDE_OPTIONS \
