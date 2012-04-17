@@ -49,6 +49,7 @@ myexit() {
         rm -f /var/lock/subsys/backup
       else
         echo "`now` [ERROR] Runtime error [CODE=001]" >&2
+        # no need exit. it's called at the below
       fi
     fi
   fi
@@ -161,6 +162,7 @@ chkinterruption() {
       rm -rf $TARGET_PATH/$LATEST
     else
       echo "`now` [ERROR] Runtime error [CODE=002]" >&2
+      myexit 1
     fi
   else
     touch /var/lock/subsys/backup
@@ -264,6 +266,7 @@ purgeexcess() {
         rm -rf $DIR
       else
         echo "`now` [ERROR] Runtime error [CODE=003]" >&2
+        myexit 1
       fi
     done
   done
@@ -291,7 +294,7 @@ purgeold() {
         rm -rf $TARGET_PATH/$OLDEST
       else
         echo "`now` [ERROR] Runtime error [CODE=004]" >&2
-        exit 1
+        myexit 1
       fi
 
       CURRENT_USAGE=`df -P | grep $MOUNT_PATH | awk '{print $5}' | sed 's/%//'`
@@ -313,6 +316,7 @@ purgeold() {
         rm -rf $TARGET_PATH/$OLDEST
       else
         echo "`now` [ERROR] Runtime error [CODE=005]" >&2
+        myexit 1
       fi
 
       CURRENT_INODE=`df -P | grep $MOUNT_PATH | awk '{print $5}' | sed 's/%//'`
