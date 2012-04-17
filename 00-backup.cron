@@ -38,6 +38,8 @@ umountpath() {
 # {{{ myeit()
 
 myexit() {
+  rm -f /var/lock/subsys/backup.tmp
+
   if [ $1 -ne 0 ]; then
     echo "`now` [WARNING] Unexpected error [CODE=$1]" >> $LOG
 
@@ -168,6 +170,17 @@ chkinterruption() {
 }
 
 # }}}
+# {{{ singleton()
+
+singleton() {
+  if [ -f /var/lock/subsys/backup.tmp ]; then
+    echo "`now` [ERROR] Another backup might be running"
+    echo "`now` [ERROR] Remove /var/lock/subsys/backup.tmp if not"
+    myexit 1
+  fi
+}
+
+# }}}
 # {{{ dorsync()
 
 dorsync() {
@@ -181,7 +194,8 @@ dorsync() {
 
   EXCLUDE_OPTIONS="$EXCLUDE_OPTIONS --exclude $TARGET_PATH"
 
-  touch /var/lock/subsys/backup
+  touch /var/lock/subsys/backup.perm
+  touch /var/lock/subsys/backup.tmp
 
   if [ -d $TARGET_PATH/latest ]; then
     rsync -av$COMPFLAG --stats --link-dest=../latest $EXCLUDE_OPTIONS \
@@ -211,7 +225,7 @@ mklatest() {
     myexit 1
   fi
 
-  rm -f /var/lock/subsys/backup
+  rm -f /var/lock/subsys/backup.perm
 }
 
 # }}}
@@ -360,6 +374,8 @@ mountpath >> $LOG
 chkinterruption >> $LOG
 
 mktargetdir >> $LOG
+
+singleton >> $LOG
 
 dorsync >> $LOG
 
