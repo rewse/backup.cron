@@ -41,7 +41,7 @@ myexit() {
   if [ $1 -ne 0 ]; then
     echo "`now` [WARNING] Unexpected error [CODE=$1]" >> $LOG
 
-    if [ $OK_SYNC != 1 ]; then
+    if [ "$OK_SYNC" != "1" ]; then
       # if $TARGET_PATH and $TARGET_DIR are blank, rm -rf / is called!
       if [ "$TARGET_PATH" != "" -a "$TARGET_DIR" != "" ]; then
         echo "`now` [NOTICE] Removing $TARGET_PATH/$TARGET_DIR..." >> $LOG
