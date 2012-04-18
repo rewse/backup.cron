@@ -41,7 +41,7 @@ myexit() {
   rm -f /var/lock/subsys/backup.tmp
 
   if [ $1 -ne 0 ]; then
-    echo "`now` [WARNING] Unexpected error [CODE=$1]" >> $LOG
+    echo "`now` [WARNING] Unexpected error [CODE=$1]" >&2
 
     if [ "$OK_SYNC" != "1" ]; then
       # if $TARGET_PATH and $TARGET_DIR are blank, rm -rf / is called!
@@ -71,41 +71,41 @@ myexit() {
 
 validconf() {
   if [ ! -d "$SOURCE_PATH" ]; then
-    echo "`now` SOURCE_PATH [$SOURCE_PATH] is not found"
+    echo "`now` [ERROR] SOURCE_PATH [$SOURCE_PATH] is not found" >&2
     exit 1
   fi
 
   case "$SKIP_MOUNT" in
     [!01])
-      echo "`now` [ERROR] SKIP_MOUNT must be 0 or 1. Actual is $SKIP_MOUNT"
+      echo "`now` [ERROR] SKIP_MOUNT must be 0 or 1. Actual is $SKIP_MOUNT" >&2
       exit 1
       ;;
   esac
 
   if [ ! -d "$MOUNT_PATH" -a "$SKIP_MOUNT" -eq 0 ]; then
-    echo "`now` [ERROR] MOUNT_PATH [$MOUNT_PATH] is not found"
+    echo "`now` [ERROR] MOUNT_PATH [$MOUNT_PATH] is not found" >&2
     exit 1
   fi
 
   if [ "`grep $MOUNT_PATH /etc/fstab`" == "" -a "$SKIP_MOUNT" -eq 0 ]; then
-    echo "`now` [ERROR] MOUNT_PATH [$MOUNT_PATH] is not found on /etc/fstab"
+    echo "`now` [ERROR] MOUNT_PATH [$MOUNT_PATH] is not found on /etc/fstab" >&2
     exit 1
   fi
 
   if [ "$TARGET_PATH" == "" ]; then
-    echo "`now` [ERROR] TARGET_PATH is blank"
+    echo "`now` [ERROR] TARGET_PATH is blank" >&2
     exit 1
   fi
 
   case "$COMPRESSION" in
     [!01])
-      echo "`now` [ERROR] COMPRESSION must be 0 or 1. Acutual is $COMPRESSION"
+      echo "`now` [ERROR] COMPRESSION must be 0 or 1. Acutual is $COMPRESSION" >&2
       exit 1
       ;;
   esac
 
   if [ "$THRESHOLD" -ge 100 -o "$THRESHOLD" -le 0 ]; then
-    echo "`now` [ERROR] THRESHOLD must be greater than 0 and less than 100. Actual is $THRESHOLD"
+    echo "`now` [ERROR] THRESHOLD must be greater than 0 and less than 100. Actual is $THRESHOLD" >&2
     exit 1
   fi
 
@@ -122,8 +122,8 @@ validconf() {
 
 singleton() {
   if [ -f /var/lock/subsys/backup.tmp ]; then
-    echo "`now` [ERROR] Another backup might be running"
-    echo "`now` [ERROR] Remove /var/lock/subsys/backup.tmp if not"
+    echo "`now` [ERROR] Another backup might be running" >&2
+    echo "`now` [ERROR] Remove /var/lock/subsys/backup.tmp if not" >&2
     exit 1
   fi
 }
