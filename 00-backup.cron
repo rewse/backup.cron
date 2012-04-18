@@ -118,6 +118,17 @@ validconf() {
 }
 
 # }}}
+# {{{ singleton()
+
+singleton() {
+  if [ -f /var/lock/subsys/backup.tmp ]; then
+    echo "`now` [ERROR] Another backup might be running"
+    echo "`now` [ERROR] Remove /var/lock/subsys/backup.tmp if not"
+    exit 1
+  fi
+}
+
+# }}}
 # {{{ mountpath()
 
 mountpath() {
@@ -166,17 +177,6 @@ chkinterruption() {
       echo "`now` [ERROR] Runtime error [CODE=002]" >&2
       myexit 1
     fi
-  fi
-}
-
-# }}}
-# {{{ singleton()
-
-singleton() {
-  if [ -f /var/lock/subsys/backup.tmp ]; then
-    echo "`now` [ERROR] Another backup might be running"
-    echo "`now` [ERROR] Remove /var/lock/subsys/backup.tmp if not"
-    myexit 1
   fi
 }
 
@@ -367,6 +367,8 @@ fi
 
 validconf >&2
 
+singleton >> $LOG
+
 echo "`now` [NOTICE] Backup begins" >> $LOG
 
 mountpath >> $LOG
@@ -374,8 +376,6 @@ mountpath >> $LOG
 chkinterruption >> $LOG
 
 mktargetdir >> $LOG
-
-singleton >> $LOG
 
 dorsync >> $LOG
 
