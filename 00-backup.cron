@@ -351,7 +351,7 @@ MOUNT_PATH=
 TARGET_PATH=
 SKIP_MOUNT=0
 COMPRESSION=1
-EXCLUDES="/cgroup /dev /lost+found /media /mnt /proc /selinux /srv /sys cache/ Cache/ tmp/"
+EXCLUDES="/cgroup /dev /lost+found /media /mnt /proc /selinux /sys cache/ Cache/ tmp/"
 THRESHOLD=95
 LOG=/var/log/backup.log
 
