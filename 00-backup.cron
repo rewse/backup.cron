@@ -40,25 +40,33 @@ umountpath() {
 }
 
 # }}}
+# {{{ chkinterruption()
+
+chkinterruption() {
+  for DIR in `ls $TARGET_PATH | grep \.incomplete`; do
+    log "NOTICE" "An incomplete backup set was detected."
+
+    # if $TARGET_PATH and $DIR are blank, rm -rf / is called!
+    if [ "$TARGET_PATH" != "" -a "$DIR" != "" ]; then
+      log "NOTICE" "Removing $TARGET_PATH/$DIR..."
+      rm -rf $TARGET_PATH/$DIR
+    else
+      log "WARNING" "Runtime error [CODE=002]" >&2
+      # no need exit. it might be called from myexit
+    fi
+  done
+}
+
+# }}}
 # {{{ myeit()
 
 myexit() {
-  rm -f /var/lock/subsys/backup.tmp
+  rm -f /var/lock/subsys/backup
 
   if [ "$1" != "0" ]; then
     log "WARNING" "Unexpected error [CODE=$1]" >&2
 
-    if [ "$OK_SYNC" != "1" ]; then
-      # if $TARGET_PATH and $TARGET_DIR are blank, rm -rf / is called!
-      if [ "$TARGET_PATH" != "" -a "$TARGET_DIR" != "" ]; then
-        echo "`now` [NOTICE] Removing $TARGET_PATH/$TARGET_DIR..." >> $LOG
-        rm -rf $TARGET_PATH/$TARGET_DIR
-        rm -f /var/lock/subsys/backup
-      else
-        echo "`now` [ERROR] Runtime error [CODE=001]" >&2
-        # no need exit. it's called at the below
-      fi
-    fi
+    chkinterruption
   fi
 
   umountpath
@@ -128,10 +136,12 @@ validconf() {
 # {{{ singleton()
 
 singleton() {
-  if [ -f /var/lock/subsys/backup.tmp ]; then
-    echo "`now` [ERROR] Another backup might be running" >&2
-    echo "`now` [ERROR] Remove /var/lock/subsys/backup.tmp if not" >&2
+  if [ -f /var/lock/subsys/backup ]; then
+    log "ERROR" "Another backup might be running" >&2
+    log "ERROR" "Remove /var/lock/subsys/backup if not" >&2
     exit 1
+  else
+    touch /var/lock/subsys/backup
   fi
 }
 
@@ -161,31 +171,13 @@ mountpath() {
 mktargetdir() {
   TARGET_DIR=`date '+%Y%m%dW%UT%H%M%S'`
 
-  mkdir $TARGET_PATH/$TARGET_DIR
+  mkdir $TARGET_PATH/$TARGET_DIR.incomplete
 
-  if [ $? -ne 0 ]; then
-    echo "`now` [ERROR] Can't make $TARGET_PATH/$TARGET_DIR [CODE=$?]" >&2
+  RETVAL=$?
+
+  if [ "$RETVAL" != "0" ]; then
+    log "ERROR" "Can't make $TARGET_PATH/$TARGET_DIR.incomplete [CODE=$RETVAL]" >&2
     myexit 1
-  fi
-}
-
-# }}}
-# {{{ chkinterruption()
-
-chkinterruption() {
-  if [ -f /var/lock/subsys/backup ]; then
-    LATEST=`ls -1 $TARGET_PATH | tail -2 | head -1`
-
-    echo "`now` [NOTICE] The previous backup was interrupted."
-
-    # if $TARGET_PATH and $LATEST are blank, rm -rf / is called!
-    if [ "$TARGET_PATH" != "" -a "$LATEST" != "" ]; then
-      echo "`now` [NOTICE] Removing $TARGET_PATH/$LATEST..."
-      rm -rf $TARGET_PATH/$LATEST
-    else
-      echo "`now` [ERROR] Runtime error [CODE=002]" >&2
-      myexit 1
-    fi
   fi
 }
 
@@ -203,15 +195,12 @@ dorsync() {
 
   EXCLUDE_OPTIONS="$EXCLUDE_OPTIONS --exclude $TARGET_PATH"
 
-  touch /var/lock/subsys/backup.perm
-  touch /var/lock/subsys/backup.tmp
-
   if [ -d $TARGET_PATH/latest ]; then
     rsync -av$COMPFLAG --stats --link-dest=../latest $EXCLUDE_OPTIONS \
-      $SOURCE_PATH/ $TARGET_PATH/$TARGET_DIR
+      $SOURCE_PATH/ $TARGET_PATH/$TARGET_DIR.incomplete
   else
     rsync -av$COMPFLAG --stats $EXCLUDE_OPTIONS \
-      $SOURCE_PATH/ $TARGET_PATH/$TARGET_DIR
+      $SOURCE_PATH/ $TARGET_PATH/$TARGET_DIR.incomplete
   fi
 
   RETVAL=$?
@@ -220,9 +209,9 @@ dorsync() {
   if [ "$RETVAL" != "0" -a $RETVAL != "24" ]; then
     log "ERROR" "Can't rsync [CODE=$RETVAL]" >&2
     myexit 1
-  else
-    OK_SYNC=1
   fi
+
+  mv $TARGET_PATH/$TARGET_DIR.incomplete $TARGET_PATH/$TARGET_DIR
 }
 
 # }}}
