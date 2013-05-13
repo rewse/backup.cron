@@ -18,7 +18,7 @@ log() {
   PRI=$1
   MSG=$2
 
-  echo "`LANG=C date '+%b %e %T'` [$1] $2"
+  echo "`LANG=C date '+%b %e %T'` [$PRI] $MSG"
 }
 
 # }}}
