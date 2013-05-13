@@ -28,9 +28,11 @@ umountpath() {
 
   umount $MOUNT_PATH
 
-  if [ $? -ne 0 ]; then
-    echo "`now` [WARNING] Can't unmount $MOUNT_PATH [CODE=$?]" >&2
-    # no need exit. it's called from myexit
+  RETVAL=$?
+
+  if [ "$RETVAL" != "0" ]; then
+    log "WARNING" "Can't unmount $MOUNT_PATH [CODE=$RETVAL]" >&2
+    # no need exit. it might be called from myexit
   fi
 }
 
@@ -111,8 +113,10 @@ validconf() {
 
   touch $LOG
 
-  if [ $? -ne 0 ]; then
-    echo "`now` [ERROR] Can't make $LOG [CODE=$?]" >&2
+  RETVAL=$?
+
+  if [ "$RETVAL" != "0" ]; then
+    log "ERROR" "Can't make $LOG [CODE=$RETVAL]" >&2
     exit 1
   fi
 }
@@ -139,8 +143,10 @@ mountpath() {
   if [ ! "`mount | grep $MOUNT_PATH`" ]; then
     mount $MOUNT_PATH
 
-    if [ $? -ne 0 ]; then
-      echo "`now` [ERROR] Can't mount $MOUNT_PATH [CODE=$?]" >&2
+    RETVAL=$?
+
+    if [ "$RETVAL" != "0" ]; then
+      log "ERROR" "Can't mount $MOUNT_PATH [CODE=$RETVAL]" >&2
       myexit 1
     fi
   fi
@@ -205,9 +211,11 @@ dorsync() {
       $SOURCE_PATH/ $TARGET_PATH/$TARGET_DIR
   fi
 
+  RETVAL=$?
+
   # 24: Partial transfer due to vanished source files
-  if [ $? -ne 0 -a $? -ne 24 ]; then
-    echo "`now` [ERROR] Can't rsync [CODE=$?]" >&2
+  if [ "$RETVAL" != "0" -a $RETVAL != "24" ]; then
+    log "ERROR" "Can't rsync [CODE=$RETVAL]" >&2
     myexit 1
   else
     OK_SYNC=1
@@ -220,12 +228,12 @@ dorsync() {
 mklatest() {
   cd $TARGET_PATH && rm -f latest && ln -s $TARGET_DIR latest && cd -
 
-  if [ $? -ne 0 ]; then
-    echo "`now` [ERROR] Can't make $TARGET_PATH/latest [CODE=$?]" >&2
+  RETVAL=$?
+
+  if [ "$RETVAL" != "0" ]; then
+    log "ERROR" "Can't make $TARGET_PATH/latest [CODE=$RETVAL]" >&2
     myexit 1
   fi
-
-  rm -f /var/lock/subsys/backup.perm
 }
 
 # }}}
