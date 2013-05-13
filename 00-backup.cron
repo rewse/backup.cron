@@ -12,10 +12,13 @@
 # Copyright (c) 2006, 2013 Rewse Lab. All rights reserved.
 #
 ######################################################################
-# {{{ now()
+# {{{ log()
 
-now() {
-  LANG=C date '+%b %e %T'
+log() {
+  PRI=$1
+  MSG=$2
+
+  echo "`LANG=C date '+%b %e %T'` [$1] $2"
 }
 
 # }}}
@@ -42,8 +45,8 @@ umountpath() {
 myexit() {
   rm -f /var/lock/subsys/backup.tmp
 
-  if [ $1 -ne 0 ]; then
-    echo "`now` [WARNING] Unexpected error [CODE=$1]" >&2
+  if [ "$1" != "0" ]; then
+    log "WARNING" "Unexpected error [CODE=$1]" >&2
 
     if [ "$OK_SYNC" != "1" ]; then
       # if $TARGET_PATH and $TARGET_DIR are blank, rm -rf / is called!
@@ -61,7 +64,7 @@ myexit() {
   umountpath
 
   cat <<! >> $LOG
-`now` [NOTICE] Backup ends
+`log "NOTICE" "Backup ends"`
 ---------------------------------------------------------------------
 !
 
@@ -73,41 +76,41 @@ myexit() {
 
 validconf() {
   if [ ! -d "$SOURCE_PATH" ]; then
-    echo "`now` [ERROR] SOURCE_PATH [$SOURCE_PATH] is not found" >&2
+    log "ERROR" "SOURCE_PATH [$SOURCE_PATH] is not found" >&2
     exit 1
   fi
 
   case "$SKIP_MOUNT" in
     [!01])
-      echo "`now` [ERROR] SKIP_MOUNT must be 0 or 1. Actual is $SKIP_MOUNT" >&2
+      log "ERROR" "SKIP_MOUNT must be 0 or 1. Actual is $SKIP_MOUNT" >&2
       exit 1
       ;;
   esac
 
   if [ ! -d "$MOUNT_PATH" -a "$SKIP_MOUNT" -eq 0 ]; then
-    echo "`now` [ERROR] MOUNT_PATH [$MOUNT_PATH] is not found" >&2
+    log "ERROR" "MOUNT_PATH [$MOUNT_PATH] is not found" >&2
     exit 1
   fi
 
   if [ "`grep $MOUNT_PATH /etc/fstab`" == "" -a "$SKIP_MOUNT" -eq 0 ]; then
-    echo "`now` [ERROR] MOUNT_PATH [$MOUNT_PATH] is not found on /etc/fstab" >&2
+    log "ERROR" "MOUNT_PATH [$MOUNT_PATH] is not found in /etc/fstab" >&2
     exit 1
   fi
 
   if [ "$TARGET_PATH" == "" ]; then
-    echo "`now` [ERROR] TARGET_PATH is blank" >&2
+    log "ERROR" "TARGET_PATH is blank" >&2
     exit 1
   fi
 
   case "$COMPRESSION" in
     [!01])
-      echo "`now` [ERROR] COMPRESSION must be 0 or 1. Acutual is $COMPRESSION" >&2
+      log "ERROR" "COMPRESSION must be 0 or 1. Acutual is $COMPRESSION" >&2
       exit 1
       ;;
   esac
 
   if [ "$THRESHOLD" -ge 100 -o "$THRESHOLD" -le 0 ]; then
-    echo "`now` [ERROR] THRESHOLD must be greater than 0 and less than 100. Actual is $THRESHOLD" >&2
+    log "ERROR" "THRESHOLD must be greater than 0 and less than 100. Actual is $THRESHOLD" >&2
     exit 1
   fi
 
@@ -284,11 +287,11 @@ purgeexcess() {
 
       # if $TARGET_PATH is blank, rm -rf / might be called!
       if [ "$TARGET_PATH" != "" ]; then
-        echo "`now` [NOTICE] Purging $DIR..."
+        log "NOTICE" "Purging $DIR..."
         rm -rf $DIR
       else
-        echo "`now` [ERROR] Runtime error [CODE=003]" >&2
-        myexit 1
+        log "ERROR" "Runtime error [CODE=003]" >&2
+        myexit -1
       fi
     done
   done
@@ -305,18 +308,18 @@ purgeold() {
     OLDEST=`ls $TARGET_PATH | head -1`
 
     if [ $OLDEST == $TARGET_DIR ]; then
-      echo "`now` [ERROR] Only one backup set but no disk free space" >&2
+      log "ERROR" "Only one backup set but no disk free space" >&2
       myexit 1
     else
-      echo "`now` [NOTICE] Disk usage must be under $THRESHOLD% but $CURRENT_USAGE% now"
+      log "NOTICE" "Disk usage must be under $THRESHOLD% but $CURRENT_USAGE% now"
 
       # if $TARGET_PATH and $OLDEST are blank, rm -rf / is called!
       if [ "$TARGET_PATH" != "" -a "$OLDEST" != "" ]; then
-        echo "`now` [NOTICE] Purging $TARGET_PATH/$OLDEST..."
+        log "NOTICE" "Purging $TARGET_PATH/$OLDEST..."
         rm -rf $TARGET_PATH/$OLDEST
       else
-        echo "`now` [ERROR] Runtime error [CODE=004]" >&2
-        myexit 1
+        log "ERROR" "Runtime error [CODE=004]" >&2
+        myexit -1
       fi
 
       CURRENT_USAGE=`df -P | grep $MOUNT_PATH | awk '{print $5}' | sed 's/%//'`
@@ -327,18 +330,18 @@ purgeold() {
     OLDEST=`ls $TARGET_PATH | head -1`
 
     if [ $OLDEST == $TARGET_DIR ]; then
-      echo "`now` [ERROR] Only one backup set but no disk free inode" >&2
+      log "ERROR" "Only one backup set but no disk free inode" >&2
       myexit 1
     else
-      echo "`now` [NOTICE] Used disk inode must be under $THRESHOLD% but $CURRENT_INODE% now"
+      log "NOTICE" "Used disk inode must be under $THRESHOLD% but $CURRENT_INODE% now"
 
       # if $TARGET_PATH and $OLDEST are blank, rm -rf / is called!
       if [ "$TARGET_PATH" != "" -a "$LATEST" != "" ]; then
-        echo "`now` [NOTICE] Purging $TARGET_PATH/$OLDEST..."
+        log "NOTICE" "Purging $TARGET_PATH/$OLDEST..."
         rm -rf $TARGET_PATH/$OLDEST
       else
-        echo "`now` [ERROR] Runtime error [CODE=005]" >&2
-        myexit 1
+        log "ERROR" "Runtime error [CODE=005]" >&2
+        myexit -1
       fi
 
       CURRENT_INODE=`df -P | grep $MOUNT_PATH | awk '{print $5}' | sed 's/%//'`
@@ -369,7 +372,7 @@ LOG=/var/log/backup.log
 if [ -f /etc/backup.conf ]; then
   . /etc/backup.conf
 else
-  echo "`now` [ERROR] /etc/backup.conf is not found" >&2
+  log "ERROR" "/etc/backup.conf is not found" >&2
   exit 1
 fi
 
@@ -377,7 +380,7 @@ validconf >&2
 
 singleton >> $LOG
 
-echo "`now` [NOTICE] Backup begins" >> $LOG
+log "NOTICE" "Backup begins" >> $LOG
 
 mountpath >> $LOG
 
